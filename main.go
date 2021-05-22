@@ -48,6 +48,7 @@ func readDemoHeader(stream io.Reader) error {
 	if err != nil {
 		return fmt.Errorf("reading Sauerbraten demo header: %w", err)
 	}
+	// todo: actually verify header
 	return nil
 }
 
@@ -57,10 +58,10 @@ func main() {
 		fmt.Printf("error parsing demo stream: %v\n", err)
 	}
 
+	fmt.Println("gamemillis, channel, data length, data (bytes in decimal)")
 	stamp, data, err := readPacket(os.Stdin)
 	for err == nil {
-		fmt.Println("Time:", stamp.Time, "Channel:", stamp.Channel, "Data Length:", stamp.Length)
-		fmt.Println("Data:", data)
+		fmt.Printf("%d, %d, %d, %v\n", stamp.Time, stamp.Channel, stamp.Length, data)
 		stamp, data, err = readPacket(os.Stdin)
 	}
 

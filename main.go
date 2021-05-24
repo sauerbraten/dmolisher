@@ -50,7 +50,7 @@ func readDemoHeader(stream io.Reader) (int32, int32, error) {
 		return -1, -1, fmt.Errorf("reading demo header: reading magic: %w", err)
 	}
 	if string(magic) != "SAUERBRATEN_DEMO" {
-		return -1, -1, fmt.Errorf("reading demo header: wrong magic (probably not a demo file)")
+		return -1, -1, fmt.Errorf("reading demo header: wrong magic (not a demo file?)")
 	}
 
 	versions := make([]int32, 2)
@@ -63,27 +63,36 @@ func readDemoHeader(stream io.Reader) (int32, int32, error) {
 }
 
 var (
-	printVersions = flag.Bool("versions", false, "print file and protocol versions")
-	printHex      = flag.Bool("hex", false, "output data bytes in hexadecimal instead of decimal")
 	filterChannel = flag.Int("channel", -1, "print only packets sent on channel (0/1/2)")
+	printHex      = flag.Bool("hex", false, "print data bytes in hexadecimal instead of decimal")
+	printVersions = flag.Bool("versions", false, "print file and protocol versions")
 )
+
+func init() {
+	flag.CommandLine.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Reads uncompressed demo file on stdin and emits CSV on stdout.\n")
+		flag.Usage()
+	}
+}
 
 func main() {
 	flag.Parse()
 
 	fileVersion, protocolVersion, err := readDemoHeader(os.Stdin)
 	if err != nil {
-		fmt.Printf("error parsing demo stream: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error parsing demo stream: %v\n", err)
+		os.Exit(1)
 	}
 	if *printVersions {
 		fmt.Printf("# file version: %d, protocol version: %d\n", fileVersion, protocolVersion)
 	}
 	if fileVersion != 1 {
-		fmt.Fprintf(os.Stderr, "error: unsupported file version (only version 1 is supported)")
+		fmt.Fprintln(os.Stderr, "error: unsupported file version (only version 1 is supported)")
 		os.Exit(1)
 	}
 
-	fmt.Println("gamemillis, channel, data length, data (bytes in decimal)")
+	fmt.Println("gamemillis, channel, data length, data")
+
 	stamp, data, err := readPacket(os.Stdin)
 	for err == nil {
 		if *filterChannel == -1 || *filterChannel == int(stamp.Channel) {
@@ -97,10 +106,12 @@ func main() {
 			}
 			fmt.Println()
 		}
+
 		stamp, data, err = readPacket(os.Stdin)
 	}
 
 	if !errors.Is(err, io.EOF) {
-		fmt.Printf("error parsing demo stream: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error parsing demo stream: %v\n", err)
+		os.Exit(1)
 	}
 }

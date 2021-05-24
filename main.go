@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -42,20 +43,40 @@ func readPacket(stream io.Reader) (*Stamp, []byte, error) {
 	return stamp, buf, nil
 }
 
-func readDemoHeader(stream io.Reader) error {
-	buf := make([]byte, 24)
-	_, err := stream.Read(buf)
+func readDemoHeader(stream io.Reader) (int32, int32, error) {
+	magic := make([]byte, 16)
+	_, err := stream.Read(magic)
 	if err != nil {
-		return fmt.Errorf("reading Sauerbraten demo header: %w", err)
+		return -1, -1, fmt.Errorf("reading demo header: reading magic: %w", err)
 	}
-	// todo: actually verify header
-	return nil
+	if string(magic) != "SAUERBRATEN_DEMO" {
+		return -1, -1, fmt.Errorf("reading demo header: wrong magic (probably not a demo file)")
+	}
+
+	versions := make([]int32, 2)
+	err = binary.Read(stream, binary.LittleEndian, versions)
+	if err != nil {
+		return -1, -1, fmt.Errorf("reading demo header: reading file and protocol versions: %w", err)
+	}
+
+	return versions[0], versions[1], nil
 }
 
+var printVersions = flag.Bool("versions", false, "print file and protocol versions")
+
 func main() {
-	err := readDemoHeader(os.Stdin)
+	flag.Parse()
+
+	fileVersion, protocolVersion, err := readDemoHeader(os.Stdin)
 	if err != nil {
 		fmt.Printf("error parsing demo stream: %v\n", err)
+	}
+	if *printVersions {
+		fmt.Printf("# file version: %d, protocol version: %d\n", fileVersion, protocolVersion)
+	}
+	if fileVersion != 1 {
+		fmt.Fprintf(os.Stderr, "error: unsupported file version (only version 1 is supported)")
+		os.Exit(1)
 	}
 
 	fmt.Println("gamemillis, channel, data length, data (bytes in decimal)")

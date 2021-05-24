@@ -62,7 +62,11 @@ func readDemoHeader(stream io.Reader) (int32, int32, error) {
 	return versions[0], versions[1], nil
 }
 
-var printVersions = flag.Bool("versions", false, "print file and protocol versions")
+var (
+	printVersions = flag.Bool("versions", false, "print file and protocol versions")
+	printHex      = flag.Bool("hex", false, "output data bytes in hexadecimal instead of decimal")
+	filterChannel = flag.Int("channel", -1, "print only packets sent on channel (0/1/2)")
+)
 
 func main() {
 	flag.Parse()
@@ -82,7 +86,17 @@ func main() {
 	fmt.Println("gamemillis, channel, data length, data (bytes in decimal)")
 	stamp, data, err := readPacket(os.Stdin)
 	for err == nil {
-		fmt.Printf("%d, %d, %d, %v\n", stamp.Time, stamp.Channel, stamp.Length, data)
+		if *filterChannel == -1 || *filterChannel == int(stamp.Channel) {
+			fmt.Printf("%6d, %d, %2d,", stamp.Time, stamp.Channel, stamp.Length)
+			for _, b := range data {
+				if *printHex {
+					fmt.Printf(" %02x", b)
+				} else {
+					fmt.Printf(" %d", b)
+				}
+			}
+			fmt.Println()
+		}
 		stamp, data, err = readPacket(os.Stdin)
 	}
 

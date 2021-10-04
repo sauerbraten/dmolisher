@@ -16,16 +16,12 @@ type Stamp struct {
 }
 
 func readStamp(stream io.Reader) (*Stamp, error) {
-	buf := make([]int32, 3)
-	err := binary.Read(stream, binary.LittleEndian, buf)
+	stamp := Stamp{}
+	err := binary.Read(stream, binary.LittleEndian, &stamp)
 	if err != nil {
 		return nil, fmt.Errorf("reading stamp: %w", err)
 	}
-	return &Stamp{
-		Time:    buf[0],
-		Channel: buf[1],
-		Length:  buf[2],
-	}, nil
+	return &stamp, nil
 }
 
 func readPacket(stream io.Reader) (*Stamp, []byte, error) {
@@ -43,23 +39,22 @@ func readPacket(stream io.Reader) (*Stamp, []byte, error) {
 	return stamp, buf, nil
 }
 
-func readDemoHeader(stream io.Reader) (int32, int32, error) {
-	magic := make([]byte, 16)
-	_, err := stream.Read(magic)
-	if err != nil {
-		return -1, -1, fmt.Errorf("reading demo header: reading magic: %w", err)
-	}
-	if string(magic) != "SAUERBRATEN_DEMO" {
-		return -1, -1, fmt.Errorf("reading demo header: wrong magic (not a demo file?)")
-	}
+type DemoHeader struct {
+	Magic           [16]byte
+	FileVersion     int32
+	ProtocolVersion int32
+}
 
-	versions := make([]int32, 2)
-	err = binary.Read(stream, binary.LittleEndian, versions)
+func readDemoHeader(stream io.Reader) (*DemoHeader, error) {
+	hdr := DemoHeader{}
+	err := binary.Read(stream, binary.LittleEndian, &hdr)
 	if err != nil {
-		return -1, -1, fmt.Errorf("reading demo header: reading file and protocol versions: %w", err)
+		return nil, fmt.Errorf("reading demo header: %w", err)
 	}
-
-	return versions[0], versions[1], nil
+	if string(hdr.Magic[:]) != "SAUERBRATEN_DEMO" {
+		return nil, fmt.Errorf("reading demo header: wrong magic (not a demo file?)")
+	}
+	return &hdr, nil
 }
 
 var (
@@ -78,24 +73,24 @@ func init() {
 func main() {
 	flag.Parse()
 
-	fileVersion, protocolVersion, err := readDemoHeader(os.Stdin)
+	hdr, err := readDemoHeader(os.Stdin)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error parsing demo stream: %v\n", err)
 		os.Exit(1)
 	}
 	if *printVersions {
-		fmt.Printf("# file version: %d, protocol version: %d\n", fileVersion, protocolVersion)
+		fmt.Printf("# file version: %d, protocol version: %d\n", hdr.FileVersion, hdr.ProtocolVersion)
 	}
-	if fileVersion != 1 {
+	if hdr.FileVersion != 1 {
 		fmt.Fprintln(os.Stderr, "error: unsupported file version (only version 1 is supported)")
-		os.Exit(1)
+		os.Exit(2)
 	}
 
 	fmt.Println("gamemillis, channel, data length, data")
 
 	stamp, data, err := readPacket(os.Stdin)
 	for err == nil {
-		if *filterChannel == -1 || *filterChannel == int(stamp.Channel) {
+		if *filterChannel == -1 || int(stamp.Channel) == *filterChannel {
 			fmt.Printf("%6d, %d, %2d,", stamp.Time, stamp.Channel, stamp.Length)
 			for _, b := range data {
 				if *printHex {
@@ -112,6 +107,6 @@ func main() {
 
 	if !errors.Is(err, io.EOF) {
 		fmt.Fprintf(os.Stderr, "error parsing demo stream: %v\n", err)
-		os.Exit(1)
+		os.Exit(3)
 	}
 }
